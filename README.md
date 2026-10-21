@@ -93,7 +93,7 @@ python3 xor_crypt_replacer_v1.py \
     <kharon-agent>.x64.bin \
     <kharon-agent-enc>.x64.bin \
     -p auto \
-    -k loader_template.cpp \
+    -k chunking.cpp \
     -addedshellcode-loader <payload>.cpp
 ```
 # 2. compile the *.cpp output into an *.exe
@@ -147,7 +147,7 @@ xor_crypt_replacer_v1.py <shellcode> <shellcode-encrypted> -k <template> -addeds
 
 ```bash
 python3 xor_crypt_replacer_v1.py shell.bin shell-enc.bin \
-    -k loader_template.cpp \
+    -k chunking.cpp \
     -addedshellcode-loader payload.cpp
 ```
 
@@ -156,7 +156,7 @@ python3 xor_crypt_replacer_v1.py shell.bin shell-enc.bin \
 ```bash
 python3 xor_crypt_replacer_v1.py shell.bin shell-enc.bin \
     -p a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4 \
-    -k loader_template.cpp \
+    -k chunking.cpp \
     -addedshellcode-loader payload.cpp
 ```
 
@@ -244,7 +244,7 @@ Prefer the in-process mode while debugging: it removes `CreateProcess`,
 ```
 .
 ├── xor_crypt_replacer_v1.py    # encrypt + template injection
-├── loader_template.cpp         # C++ loader with markers
+├── chunking.cpp                # C++ loader with markers
 ├── <whatEverYouWant>.rc        # version info + icon
 ├── <whatEverYouWant>.ico
 ├── .gitignore
