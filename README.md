@@ -335,6 +335,3 @@ notes.
 
 ---
 
-## License
-
-[MIT](LICENSE) — do whatever you want with it.
