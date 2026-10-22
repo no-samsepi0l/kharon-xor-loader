@@ -246,8 +246,7 @@ Prefer the in-process mode while debugging: it removes `CreateProcess`,
 ├── xor_crypt_replacer_v1.py    # encrypt + template injection
 ├── chunking.cpp                # C++ loader with markers
 ├── <whatEverYouWant>.rc        # version info + icon
-├── <whatEverYouWant>.ico
-├── .gitignore
+├── <whatEverYouWant>.ico       # icon
 └── README.md
 ```
 
