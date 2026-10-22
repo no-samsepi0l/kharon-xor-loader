@@ -84,7 +84,7 @@ sudo dnf install mingw64-gcc python3
 ```
 ```bash
 # 0.4 Alpine Linux
-sudo dnf install mingw64-gcc python3
+sudo apk add mingw64-gcc python3
 ```
 # 1. Main generation
 ```bash
