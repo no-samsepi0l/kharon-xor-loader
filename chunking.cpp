@@ -140,7 +140,7 @@ static void xor_decrypt_chunked(unsigned char* buf, SIZE_T len,
             buf[off + i] ^= key[(off + i) % keyLen];
 
         if (off + n < len)
-            Sleep(45);                    // let the chunk settle
+            Sleep(30 + (DWORD)(rand() % 20)); // 30–50 ms                       // let the chunk settle
     }
 }
 
