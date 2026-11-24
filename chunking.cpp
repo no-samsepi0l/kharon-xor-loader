@@ -1,4 +1,5 @@
 // ============ ADAPTIX SHELLCODE LOADER ============
+//(https://mitchells-journal.gitbook.io/writings/adaptixc2-and-gcb-lab/2.-payload-creation)
 //
 // 1. DLL UNHOOKING        -> reload .text of ntdll/kernel32/kernelbase/advapi32
 // 2. TELEMETRY BYPASSES   -> ETW (EtwEventWrite = ret) ; AMSI commented out
